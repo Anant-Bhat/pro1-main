@@ -31,18 +31,18 @@ topicInput.addEventListener("input", () => {
       : `${len} character${len !== 1 ? "s" : ""} · ready to generate`;
 });
 
-/* ── Generate (from input) ───────────────────────────────────────────────── */
+/* ── Generate ───────────────────────────────────────────────────────────── */
 async function generateQuestions() {
   const topic = topicInput.value.trim();
 
   if (!topic) {
-    showError("Please enter a topic before generating questions.");
-    topicInput.focus();
+    showError("Please enter a topic.");
     shakeInput();
     return;
   }
+
   if (topic.length < 2) {
-    showError("Topic is too short — try something more descriptive.");
+    showError("Topic too short.");
     shakeInput();
     return;
   }
@@ -54,79 +54,73 @@ async function generateQuestions() {
 /* ── Regenerate ─────────────────────────────────────────────────────────── */
 async function regenerate() {
   if (!currentTopic) return;
-
-  regenBtn.classList.add("spinning");
-  regenBtn.addEventListener("animationend", () => regenBtn.classList.remove("spinning"), { once: true });
-
   await fetchAndRender(currentTopic, true);
 }
 
 /* ── Fetch + render ─────────────────────────────────────────────────────── */
 async function fetchAndRender(topic, isRegen) {
-  setLoading(true, isRegen);
+  setLoading(true);
   hideError();
   if (!isRegen) hideResults();
 
   try {
     const res = await fetch(`${API_BASE}/api/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ topic }),
     });
 
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      throw new Error(`Server returned unexpected response (${res.status})`);
-    }
+    const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.error || `Server error: ${res.status}`);
+      throw new Error(data.error || "Server error");
     }
 
-    renderResults(data, isRegen);
+    renderResults(data);
 
   } catch (err) {
-    showError("Cannot connect to server. Please try again later.");
+    console.error(err);
+    showError("⚠️ Server not reachable. Try again later.");
   } finally {
-    setLoading(false, isRegen);
+    setLoading(false);
   }
 }
 
-/* ── Reset ─────────────────────────────────────────────────────────────── */
-function resetAll() {
-  currentTopic = "";
-  hideResults();
-  hideError();
-  topicInput.value = "";
-  charCount.textContent = "Press Enter or click Generate";
-  topicInput.focus();
-}
-
 /* ── Render results ─────────────────────────────────────────────────────── */
-function renderResults(data, isRegen) {
-  resultsMeta.textContent = `${data.count} questions`;
-  resultsTopic.textContent = data.topic;
+function renderResults(data) {
+  // FIXED HERE ✅
+  resultsMeta.textContent = `${data?.count || 0} questions`;
+  resultsTopic.textContent = data?.topic || "Topic";
 
-  buildCards(data.questions);
+  buildCards(data?.questions || []);
   showResults();
 }
 
 /* ── Build cards ────────────────────────────────────────────────────────── */
 function buildCards(questions) {
   cardsGrid.innerHTML = "";
-  questions.forEach((qa, idx) => {
+
+  if (!questions.length) {
+    cardsGrid.innerHTML = "<p>No questions found.</p>";
+    return;
+  }
+
+  questions.forEach((qa) => {
     const div = document.createElement("div");
+    div.className = "qa-card";
+
     div.innerHTML = `
-      <h3>${qa.id}. ${qa.question}</h3>
-      <p>${qa.answer}</p>
+      <h3>${qa.id}. ${escapeHtml(qa.question)}</h3>
+      <p>${escapeHtml(qa.answer)}</p>
     `;
+
     cardsGrid.appendChild(div);
   });
 }
 
-/* ── UI helpers ─────────────────────────────────────────────────────────── */
+/* ── Helpers ────────────────────────────────────────────────────────────── */
 function setLoading(on) {
   loader.classList.toggle("hidden", !on);
   generateBtn.disabled = on;
@@ -149,8 +143,14 @@ function hideResults() {
   resultsSection.classList.add("hidden");
 }
 
-/* ── Shake ──────────────────────────────────────────────────────────────── */
 function shakeInput() {
   topicInput.style.animation = "shake 0.4s ease";
-  setTimeout(() => topicInput.style.animation = "", 400);
+  setTimeout(() => (topicInput.style.animation = ""), 400);
+}
+
+/* ── Prevent HTML injection ─────────────────────────────────────────────── */
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
